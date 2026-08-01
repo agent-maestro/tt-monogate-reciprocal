@@ -1,56 +1,57 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
+  title:        "Monogate certified reciprocal (Q8.8)"      # Project title
+  author:       "Monogate"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
+  description:  "Newton-Raphson fixed-point reciprocal with a machine-checked forward-error bound (Lean) and a bench-measured seed margin"      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  clock_hz:     50000000       # Clock frequency in Hz (or 0 if not applicable)
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  tiles: "4x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_example"
+  top_module:  "tt_um_monogate_reciprocal"
 
   # List your project's source files here.
   # Source files must be in ./src and you must list each source file separately, one per line.
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
-    - "project.v"
+    - "eml_reciprocal.v"
+    - "tt_um_monogate_reciprocal.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
   # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  ui[0]: "x_in[0] (operand low byte)"
+  ui[1]: "x_in[1] (operand low byte)"
+  ui[2]: "x_in[2] (operand low byte)"
+  ui[3]: "x_in[3] (operand low byte)"
+  ui[4]: "x_in[4] (operand low byte)"
+  ui[5]: "x_in[5] (operand low byte)"
+  ui[6]: "x_in[6] (operand low byte)"
+  ui[7]: "x_in[7] (operand low byte)"
 
   # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  uo[0]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[1]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[2]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[3]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[4]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[5]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[6]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[7]: "result byte (phase 0 = low, phase 1 = high)"
 
   # Bidirectional pins
-  uio[0]: ""
-  uio[1]: ""
-  uio[2]: ""
-  uio[3]: ""
-  uio[4]: ""
-  uio[5]: ""
-  uio[6]: ""
-  uio[7]: ""
+  uio[0]: "x_in[8] (operand high byte, input only)"
+  uio[1]: "x_in[9] (operand high byte, input only)"
+  uio[2]: "x_in[10] (operand high byte, input only)"
+  uio[3]: "x_in[11] (operand high byte, input only)"
+  uio[4]: "x_in[12] (operand high byte, input only)"
+  uio[5]: "x_in[13] (operand high byte, input only)"
+  uio[6]: "x_in[14] (operand high byte, input only)"
+  uio[7]: "x_in[15] (operand high byte, input only)"
 
 # Do not change!
 yaml_version: 6
