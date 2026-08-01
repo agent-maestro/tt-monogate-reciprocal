@@ -51,13 +51,28 @@ module tt_um_monogate_reciprocal (
       .result    (result)
   );
 
+  // ── FRAME-STABLE OUTPUT (defect fix 2026-08-01, found by BAR 4 before tapeout) ────────────
+  // `held` updates whenever out_valid pulses -- every 2 cycles. Reading its low byte on phase 0
+  // and its high byte on phase 1 therefore STRADDLED an update: the two bytes could come from
+  // DIFFERENT RESULTS. Signature was ~77% agreement with the golden at every even frame offset
+  // and 0% at every odd one -- a partial match that no alignment could fix, which is what
+  // distinguishes tearing from misalignment.
+  //
+  // `shown` republishes `held` only at a frame boundary, so both bytes of any frame come from one
+  // result. Costs one 16-bit register; the kernel is untouched.
   reg [15:0] held;
+  reg [15:0] shown;
   always @(posedge clk) begin
-    if (rst)            held <= 16'd0;
-    else if (out_valid) held <= result;
+    if (rst) begin
+      held  <= 16'd0;
+      shown <= 16'd0;
+    end else begin
+      if (out_valid) held <= result;
+      if (!phase)    shown <= held;
+    end
   end
 
-  assign uo_out  = phase ? held[15:8] : held[7:0];
+  assign uo_out  = phase ? shown[15:8] : shown[7:0];
   assign uio_out = 8'd0;
   assign uio_oe  = 8'd0;
 
