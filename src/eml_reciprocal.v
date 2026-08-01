@@ -165,7 +165,7 @@
 //   should never emit `a / 0` for a constant; for a variable, the
 //   caller is responsible for an `assume (b != 0)`).
 //
-// Pipeline: 15 stages, 1 sample/cycle throughput, 15-cycle latency. Each of the 7
+// Pipeline: 17 stages, 1 sample/cycle throughput, 17-cycle latency. Each of the 7
 // Q-format multiplies is split into a MULTIPLY stage (64-bit product registered
 // into the DSP48 PREG) and a TRUNCATE stage (`>>>FRAC`), so both are <10 ns and the
 // datapath closes 100 MHz (one qmul is ~15 ns combinational on Arty: ~5.4 ns DSP +
@@ -253,7 +253,7 @@ module eml_reciprocal #(
     // advisories asked for since run 1) BEFORE the truncate, so multiply (~5.4 ns)
     // and truncate (~4.5 ns) are separate <10 ns stages. Each of the 7 qmuls
     // becomes `_m` (product) + `_t` (truncate); with the A_n normaliser split that is
-    // 15 stages, latency 15, 1 sample/cycle throughput. Purely structural: BIT-IDENTICAL
+    // 17 stages, latency 17, 1 sample/cycle throughput. Purely structural: BIT-IDENTICAL
     // result (registering the product/operands doesn't change `(a*b)>>>FRAC`), so
     // nr_reciprocal_2stage unchanged.
     //   A  : m   = |b| * 2^-k >> F        B1: c2m = C2 * m >> F
@@ -278,12 +278,18 @@ module eml_reciprocal #(
     reg signed [WIDTH-1:0]   x_1am, y0_1am, sat_1am; reg norm_1am, v_1am;
     reg signed [2*WIDTH-1:0] p_1am;
     reg signed [WIDTH-1:0]   x_1at, y0_1at, by1_1at, sat_1at; reg norm_1at, v_1at;
+    // ── N1a_s (added 2026-08-01): registers the subtract (TWO - by1) AHEAD of N1b's multiply.
+    //    Shape-matched to the _1am/_1at split N1a already carries. See
+    //    monogate-research/chip/PIPE_002_PREREGISTRATION.md.
+    reg signed [WIDTH-1:0]   x_1as, y0_1as, d1_1as, sat_1as; reg norm_1as, v_1as;
     reg signed [WIDTH-1:0]   x_1bm, sat_1bm; reg norm_1bm, v_1bm;
     reg signed [2*WIDTH-1:0] p_1bm;
     reg signed [WIDTH-1:0]   x_1bt, y1_1bt, sat_1bt; reg norm_1bt, v_1bt;
     reg signed [WIDTH-1:0]   y1_2am, sat_2am; reg norm_2am, v_2am;
     reg signed [2*WIDTH-1:0] p_2am;
     reg signed [WIDTH-1:0]   y1_2at, by2_2at, sat_2at; reg norm_2at, v_2at;
+    // ── N2a_s (added 2026-08-01): the same split on the second Newton stage.
+    reg signed [WIDTH-1:0]   y1_2as, d2_2as, sat_2as; reg norm_2as, v_2as;
     reg signed [2*WIDTH-1:0] p_2bm; reg signed [WIDTH-1:0] sat_2bm; reg norm_2bm, v_2bm;
     reg signed [WIDTH-1:0]   y2_2bt, sat_2bt; reg norm_2bt, v_2bt;
 
@@ -305,12 +311,14 @@ module eml_reciprocal #(
             x_b2m <= '0; sat_b2m <= '0; sign_b2m <= 1'b0; norm_b2m <= 1'b0; v_b2m <= 1'b0; p_b2m <= '0;
             sat_b2t <= '0; norm_b2t <= 1'b0; sat_1am <= '0; norm_1am <= 1'b0;
             sat_1at <= '0; norm_1at <= 1'b0; sat_1bm <= '0; norm_1bm <= 1'b0;
+            y1_2as <= '0; d2_2as <= '0; sat_2as <= '0; norm_2as <= 1'b0; v_2as <= 1'b0;
             sat_1bt <= '0; norm_1bt <= 1'b0; sat_2am <= '0; norm_2am <= 1'b0;
             sat_2at <= '0; norm_2at <= 1'b0; sat_2bm <= '0; norm_2bm <= 1'b0;
             sat_2bt <= '0; norm_2bt <= 1'b0;
             x_b2t <= '0; y0_b2t <= '0; v_b2t <= 1'b0;
             x_1am <= '0; y0_1am <= '0; v_1am <= 1'b0; p_1am <= '0;
             x_1at <= '0; y0_1at <= '0; by1_1at <= '0; v_1at <= 1'b0;
+            x_1as <= '0; y0_1as <= '0; d1_1as <= '0; sat_1as <= '0; norm_1as <= 1'b0; v_1as <= 1'b0;
             x_1bm <= '0; v_1bm <= 1'b0; p_1bm <= '0;
             x_1bt <= '0; y1_1bt <= '0; v_1bt <= 1'b0;
             y1_2am <= '0; v_2am <= 1'b0; p_2am <= '0;
@@ -370,8 +378,12 @@ module eml_reciprocal #(
             x_1at <= x_1am; y0_1at <= y0_1am; by1_1at <= p_1am >>> FRAC; v_1at <= v_1am;
             norm_1at <= norm_1am; sat_1at <= sat_1am;
             // ── N1b_m: product y0 * (2 - by1) ──
-            x_1bm <= x_1at; p_1bm <= y0_1at * (TWO - by1_1at); v_1bm <= v_1at;
-            norm_1bm <= norm_1at; sat_1bm <= sat_1at;
+            // ── N1a_s: register the subtract AHEAD of the multiply (was one cycle with it) ──
+            x_1as <= x_1at; y0_1as <= y0_1at; d1_1as <= TWO - by1_1at; v_1as <= v_1at;
+            norm_1as <= norm_1at; sat_1as <= sat_1at;
+            // ── N1b_m: product y0 * d1 ──
+            x_1bm <= x_1as; p_1bm <= y0_1as * d1_1as; v_1bm <= v_1as;
+            norm_1bm <= norm_1as; sat_1bm <= sat_1as;
             // ── N1b_t: y1 = p_1bm >>> FRAC ──
             x_1bt <= x_1bm; y1_1bt <= p_1bm >>> FRAC; v_1bt <= v_1bm;
             norm_1bt <= norm_1bm; sat_1bt <= sat_1bm;
@@ -382,8 +394,11 @@ module eml_reciprocal #(
             y1_2at <= y1_2am; by2_2at <= p_2am >>> FRAC; v_2at <= v_2am;
             norm_2at <= norm_2am; sat_2at <= sat_2am;
             // ── N2b_m: product y1 * (2 - by2) ──
-            p_2bm <= y1_2at * (TWO - by2_2at); v_2bm <= v_2at;
-            norm_2bm <= norm_2at; sat_2bm <= sat_2at;
+            y1_2as <= y1_2at; d2_2as <= TWO - by2_2at; v_2as <= v_2at;
+            norm_2as <= norm_2at; sat_2as <= sat_2at;
+            // ── N2b_m: product y1 * d2 ──
+            p_2bm <= y1_2as * d2_2as; v_2bm <= v_2as;
+            norm_2bm <= norm_2as; sat_2bm <= sat_2as;
             // ── N2b_t: y2 = p_2bm >>> FRAC — output ──
             y2_2bt <= p_2bm >>> FRAC; v_2bt <= v_2bm;
             norm_2bt <= norm_2bm; sat_2bt <= sat_2bm;
