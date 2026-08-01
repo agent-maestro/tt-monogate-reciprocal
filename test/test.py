@@ -52,29 +52,30 @@ async def read_frame(dut, hi_first):
 async def calibrate_phase(dut):
     """STEP ZERO for this test: establish the read byte order from a KNOWN operand.
 
-    `uo_out` shows the low byte on one phase and the high byte on the other, and which one a read
-    lands on depends on the parity of the settle count. Assuming it is how a correct design gets
-    convicted. If NEITHER order reproduces the known answer, the test refuses to grade anything --
-    a harness that cannot establish its own alignment cannot judge a netlist.
+    CRITICAL: this consumes EXACTLY the same number of clock cycles as one iteration of the grading
+    loop (SETTLE + 2). An earlier version consumed a different count depending on which order it
+    tried, so calibration and the loop ended on opposite phases and every graded sample came back
+    off by a byte -- `got == exp * 256` across all 300 samples. Phase parity is state; a calibration
+    that perturbs it differently than the thing it calibrates has calibrated nothing.
     """
     probe = 386                                   # the seed-margin worst case, a real operating point
     expect = reciprocal(probe)
     drive(dut, probe)
     await ClockCycles(dut.clk, SETTLE)
+    a = int(dut.uo_out.value)
+    await RisingEdge(dut.clk)
+    b = int(dut.uo_out.value)
+    await RisingEdge(dut.clk)                     # same trailing tick as the loop
     for hi_first in (True, False):
-        # re-read the same settled frame under both interpretations
-        a = int(dut.uo_out.value)
-        await RisingEdge(dut.clk)
-        b = int(dut.uo_out.value)
         r = (a << 8) | b if hi_first else (b << 8) | a
         r = r - (1 << 16) if r & 0x8000 else r
         if r == expect:
             dut._log.info(f"phase calibrated: hi_first={hi_first} (probe b={probe} -> {r})")
             return hi_first
-        await RisingEdge(dut.clk)
     raise AssertionError(
-        f"CALIBRATION FAILED: neither byte order reproduces golden({probe})={expect}. "
-        "The harness cannot establish its own alignment, so BAR 4 cannot be graded."
+        f"CALIBRATION FAILED: neither byte order reproduces golden({probe})={expect} "
+        f"(read bytes {a:#04x}, {b:#04x}). The harness cannot establish its own alignment, "
+        "so BAR 4 cannot be graded."
     )
 
 
