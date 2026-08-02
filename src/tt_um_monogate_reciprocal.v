@@ -45,7 +45,16 @@
 module tt_um_monogate_reciprocal #(
     // The frozen-source pointer this die reports.
     //
-    // PINNED 2026-08-01 to monogate-research tag `additions-evidence-v1` = commit 9fb80077, the
+    // RE-PINNED 2026-08-02 to `additions-evidence-v2` = commit c03ff86c, THE PASSED TREE.
+    //
+    // v1 (9fb80077) was cut BEFORE runs 005 and 006, so its frozen RTL lacks the x_in / in_valid /
+    // kernel_rst registers this design carries. A die pinned to v1 would send its 2027 interrogator
+    // to RTL that is NOT in the silicon -- the exact defect this register exists to prevent,
+    // introduced by the timing fix that made the die worth fabricating. The pointer must be cut
+    // AFTER the tree it describes is final, which for a provenance register means after the last
+    // RTL change, not after the first.
+    //
+    // Previously pinned to `additions-evidence-v1` = commit 9fb80077, the
     // frozen pre-submission evidence state: the armed pre-registration, the CRC derivation script
     // and its expected values, this RTL, and bar 2's test suite.
     //
@@ -54,7 +63,7 @@ module tt_um_monogate_reciprocal #(
     // the hash would have to contain itself. Pointing at a tag that already exists and never moves
     // is the only non-circular option, and it was fixed as a sequence before push day rather than
     // discovered during the shuttle window.
-    parameter [31:0] PROVENANCE_ID = 32'h9FB80077
+    parameter [31:0] PROVENANCE_ID = 32'hC03FF86C
 ) (
     input  wire [7:0] ui_in,
     output wire [7:0] uo_out,

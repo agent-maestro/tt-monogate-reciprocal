@@ -34,6 +34,24 @@ jobs:
         with:
           submodules: recursive
 
+      # VERSION ECHO -- closes run 003's recorded UNAVAILABLE.
+      #
+      # Run 003's notes recorded the cocotb and Icarus versions as UNMEASURED, not inferred: they are
+      # pinned by test/requirements.txt and the runner's apt, but THE JOB DID NOT PRINT THEM, and
+      # "a version I did not read is not a version I know". Run 003 was explicitly forbidden from
+      # changing the workflow, so the gap was recorded rather than closed. This is the additions run,
+      # where that change is licensed.
+      #
+      # Placed BEFORE the GL test so the versions are on the record even if the test then fails --
+      # a provenance line that only prints on success is not provenance.
+      - name: Echo tool versions (provenance)
+        run: |
+          echo "iverilog : $(iverilog -V 2>&1 | head -1)"
+          echo "python   : $(python3 --version 2>&1)"
+          echo "cocotb   : $(python3 -m pip show cocotb 2>/dev/null | awk '/^Version:/{print $2}')"
+          echo "pytest   : $(python3 -m pip show pytest 2>/dev/null | awk '/^Version:/{print $2}')"
+          echo "runner   : $(. /etc/os-release; echo "$PRETTY_NAME") $(uname -m)"
+
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26c
 
