@@ -111,7 +111,45 @@ module tt_um_monogate_reciprocal #(
   // -- kernel feed -----------------------------------------------------------------------------
   // In BIST the operand comes from the sweep counter; otherwise from the pins. in_valid keeps its
   // original cadence in both cases, so the kernel sees an unchanged interface.
-  wire signed [15:0] x_in = (state == S_RUN) ? $signed(sweep_idx) : $signed(pin_operand);
+  // REGISTERED OPERAND SELECT -- run 005's critical path, cut at the source.
+  //
+  // Run 005 measured the worst setup path as  state[1] -> u_recip.y0e_an[7]  at -0.535 ns: the FSM
+  // state decode fed a 16-bit MUX straight into the kernel's first pipeline stage. THIS IS THE
+  // SECOND INSTANCE OF ONE LAW in this flow -- the EKF scheduler needed the same register on the
+  // same shape -- so it is now a design-time rule, not a post-harden repair:
+  //
+  //     WHENEVER AN FSM ARBITRATES A DATAPATH INPUT, THE SELECT DECODE + MUX + DOWNSTREAM LOGIC IS
+  //     THE DEFAULT CRITICAL PATH. THE REGISTER GOES IN AT DESIGN TIME.
+  //
+  // `in_valid` is delayed with the operand so the (operand, valid) pair travels as a unit -- a
+  // registered operand with an un-delayed valid would latch the PREVIOUS cycle's operand, which is
+  // a silent off-by-one in the data rather than a timing failure.
+  //
+  // Both are cleared by the flush, not just the kernel: the flush previously emptied the kernel and
+  // left these two registers holding a pre-BIST operand, which is the recv_cnt residue defect ONE
+  // FLOP WIDE. The after-traffic convict would catch it; catching it here is free.
+  wire signed [15:0] x_sel = (state == S_RUN) ? $signed(sweep_idx) : $signed(pin_operand);
+
+  reg signed [15:0] x_in_q;
+  reg               in_valid_q;
+  reg               kernel_rst_q;
+
+  always @(posedge clk) begin
+    // REGISTERED RESET QUALIFIER -- the path's OTHER route. `state` also reached the kernel through
+    // `rst || (state == S_ARM)`, fanning a state decode into every kernel flop's reset. Cutting only
+    // the MUX would have left this as the new worst path and bought a smaller failure on the route
+    // the fix did not touch. Delaying flush onset by one cycle is absorbed by S_ARM's two-cycle
+    // dwell, which the two-frame trigger hold already guarantees.
+    kernel_rst_q <= rst || (state == S_ARM);
+    if (rst || kernel_rst_q) begin
+      x_in_q     <= 16'sd0;
+      in_valid_q <= 1'b0;
+    end else begin
+      x_in_q     <= x_sel;
+      in_valid_q <= ~phase;
+    end
+  end
+
   wire signed [15:0] result;
   wire               out_valid;
 
@@ -127,13 +165,11 @@ module tt_um_monogate_reciprocal #(
   // Consequence, documented rather than discovered: driving 0x8000 discards any results still in
   // flight. That is reserved-word semantics -- 0x8000 is not a reciprocal operand, it is the BIST
   // trigger -- and it costs nothing certified.
-  wire kernel_rst = rst || (state == S_ARM);
-
   eml_reciprocal #(.WIDTH(16), .FRAC(8), .PIPELINE_STAGES(2)) u_recip (
       .clk       (clk),
-      .rst       (kernel_rst),
-      .in_valid  (~phase),
-      .x_in      (x_in),
+      .rst       (kernel_rst_q),
+      .in_valid  (in_valid_q),
+      .x_in      (x_in_q),
       .out_valid (out_valid),
       .result    (result)
   );
@@ -158,8 +194,9 @@ module tt_um_monogate_reciprocal #(
   // Which input does the CURRENT result belong to? `recv_cnt`, because out_valid pulses once per
   // issued input, in order. THE DRAIN IS THEREFORE LATENCY-INDEPENDENT: nothing here encodes the
   // measured 17-cycle issue-to-valid figure, so an error in that constant cannot shift which
-  // 65,536 results the checksum covers. (Latency measured 2026-08-01 at 17 cycles issue-to-valid
-  // against a golden-matched ramp; the header comment's 15 is pre-split and stale.)
+  // 65,536 results the checksum covers. (Latency: 17 cycles issue-to-valid before the operand register,
+  // 18 after it -- both measured against a golden-matched ramp; the kernel header's 15 is pre-split
+  // and stale, preserved by policy because the certified kernel is byte-identical.)
   wire [15:0] recv_idx  = recv_cnt[15:0];
   wire [15:0] recv_abs  = recv_idx[15] ? (~recv_idx + 16'd1) : recv_idx;
   wire        recv_cert = (recv_abs >= CERT_LO) && (recv_abs <= CERT_HI);
