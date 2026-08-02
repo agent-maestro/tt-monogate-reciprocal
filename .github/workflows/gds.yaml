@@ -34,26 +34,38 @@ jobs:
         with:
           submodules: recursive
 
-      # VERSION ECHO -- closes run 003's recorded UNAVAILABLE.
-      #
-      # Run 003's notes recorded the cocotb and Icarus versions as UNMEASURED, not inferred: they are
-      # pinned by test/requirements.txt and the runner's apt, but THE JOB DID NOT PRINT THEM, and
-      # "a version I did not read is not a version I know". Run 003 was explicitly forbidden from
-      # changing the workflow, so the gap was recorded rather than closed. This is the additions run,
-      # where that change is licensed.
-      #
-      # Placed BEFORE the GL test so the versions are on the record even if the test then fails --
-      # a provenance line that only prints on success is not provenance.
-      - name: Echo tool versions (provenance)
-        run: |
-          echo "iverilog : $(iverilog -V 2>&1 | head -1)"
-          echo "python   : $(python3 --version 2>&1)"
-          echo "cocotb   : $(python3 -m pip show cocotb 2>/dev/null | awk '/^Version:/{print $2}')"
-          echo "pytest   : $(python3 -m pip show pytest 2>/dev/null | awk '/^Version:/{print $2}')"
-          echo "runner   : $(. /etc/os-release; echo "$PRETTY_NAME") $(uname -m)"
-
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26c
+
+      # VERSION ECHO -- run 003's UNAVAILABLE, closed properly on the second attempt.
+      #
+      # ATTEMPT 1 (run 007) RAN BEFORE THE ACTION AND PRINTED BLANKS. The toolchain is installed BY
+      # the gl_test action, so echoing first reported `iverilog: command not found` and empty cocotb
+      # and pytest fields. AN EMPTY PROVENANCE FIELD IS WORSE THAN A MISSING STEP -- it looks like a
+      # measurement. Run 003's honest `UNAVAILABLE` was strictly better than run 007's blank.
+      #
+      # Now: AFTER the action, `if: always()` so a failed test still yields provenance, and each
+      # field REFUSES rather than printing empty.
+      - name: Echo tool versions (provenance)
+        if: always()
+        run: |
+          fail=0
+          emit () {   # emit <label> <value>
+            if [ -z "$2" ]; then
+              echo "$1: UNAVAILABLE — not readable in this job"
+              fail=1
+            else
+              echo "$1: $2"
+            fi
+          }
+          emit "iverilog" "$(iverilog -V 2>/dev/null | head -1)"
+          emit "python  " "$(python3 --version 2>&1)"
+          emit "cocotb  " "$(python3 -m pip show cocotb 2>/dev/null | awk '/^Version:/{print $2}')"
+          emit "pytest  " "$(python3 -m pip show pytest 2>/dev/null | awk '/^Version:/{print $2}')"
+          emit "runner  " "$(. /etc/os-release; echo "$PRETTY_NAME") $(uname -m)"
+          if [ "$fail" -ne 0 ]; then
+            echo "::warning::one or more provenance fields are UNAVAILABLE — recorded as instrument failure, not as a value"
+          fi
 
   viewer:
     needs: gds
