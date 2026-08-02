@@ -40,7 +40,9 @@ against fails here rather than silently grading against a stale number.
 
 ## The egress order is CALIBRATED, not asserted
 
-`PROVENANCE_ID` is a known constant, so the 8-byte egress window is *located* by scanning for it and
+`PROVENANCE_ID` is a **pre-registered** constant loaded from `provenance_expected.json` — never read
+from the DUT, which would be an oracle consulting its subject — so the 8-byte egress window is
+*located* by scanning for it and
 the CRC is read from the four bytes before it. Same discipline as `calibrate_phase()` in `test.py`:
 the byte order of this interface has already been wrong once in prose, and the only artifact allowed
 to assert it is a probe.
@@ -49,9 +51,21 @@ import json
 import os
 from pathlib import Path
 
-import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge
+try:                                    # cocotb is needed for the simulator tests, not the specimen
+    import cocotb
+    from cocotb.clock import Clock
+    from cocotb.triggers import ClockCycles, RisingEdge
+except ImportError:                     # pragma: no cover - standalone specimen run
+    # A shim so the specimen block at the bottom runs with no simulator installed. The oracle
+    # defect that failed run 004 must be catchable without cocotb, a PDK, or 131k cycles.
+    class _NoCocotb:
+        @staticmethod
+        def test(*a, **k):
+            def deco(fn):
+                return fn
+            return deco
+    cocotb = _NoCocotb()
+    Clock = ClockCycles = RisingEdge = None
 
 HERE = Path(__file__).resolve().parent
 BIST_MAGIC = 0x8000
@@ -160,28 +174,44 @@ def _find_egress(trace, prov_id):
     return None, -1
 
 
-def _provenance_id(dut):
-    """Read PROVENANCE_ID off the DUT. REFUSES rather than falling back to a literal.
+def _provenance_id(dut=None):
+    """The PRE-REGISTERED provenance ID, loaded from outside the design under test.
 
-    The first version of this function ended `else 0xF4828539` -- a hardcoded fallback that worked
-    only because it happened to equal the parameter's default. The moment the ID was pinned to the
-    evidence tag, the fallback silently anchored the egress scan on a constant the design no longer
-    emits, and all three sweep tests failed for a reason that had nothing to do with the design.
+    TWO DEFECTS DIED HERE, BOTH FIRED BY RUN 004.
 
-    **A default that masks the value it stands in for is the defect this whole session catalogues.**
-    So: resolve it, or refuse.
+    1. **Unreadable at gate level.** The previous version read `PROVENANCE_ID` off the DUT.
+       **Parameters bake at synthesis** — on a flattened netlist the name does not exist, so all
+       three sweep tests aborted at 110 ns with `cannot read PROVENANCE_ID from the DUT`. The same
+       fact that made a parameterised short sweep inadmissible made this harness inadmissible, and
+       the ruling was applied to the fallback and not to the harness that inherited it.
+
+    2. **Circular, which is worse.** Anchoring the egress scan on a value read *from the DUT* means
+       a die carrying the WRONG provenance ID would have been graded against its own wrong ID —
+       and passed. **AN ORACLE THAT CONSULTS THE SUBJECT IS NOT AN ORACLE.** It is house rule 12's
+       mirror image: the seal-check pattern was built for the CRC in this same file, and the
+       provenance check was the deviation.
+
+    The expected value now comes from `provenance_expected.json`, which is committed, predates the
+    run, and derives from the `additions-evidence-v1` tag. **`dut` is accepted and ignored**, kept
+    only so the call sites read the same; nothing about the design under test can influence what
+    this returns.
+
+    REFUSES rather than defaulting. The defect just fired was an oracle consulting the subject; the
+    adjacent one, a single lazy default away, is an oracle consulting nothing.
     """
-    for path in (("user_project", "PROVENANCE_ID"), ("PROVENANCE_ID",)):
-        obj = dut
-        try:
-            for attr in path:
-                obj = getattr(obj, attr)
-            return int(obj.value)
-        except Exception:                                       # noqa: BLE001
-            continue
+    for cand in (HERE / "provenance_expected.json", HERE.parent / "provenance_expected.json"):
+        if cand.is_file():
+            d = json.loads(cand.read_text())
+            if "provenance_id_int" not in d:
+                raise AssertionError(
+                    f"{cand.name} carries no `provenance_id_int`. The egress window is anchored on "
+                    f"it, so without it this suite cannot grade anything — and it will not guess."
+                )
+            return int(d["provenance_id_int"])
     raise AssertionError(
-        "cannot read PROVENANCE_ID from the DUT. The egress window is located by anchoring on it, "
-        "so without it this suite cannot grade anything -- and it will not guess."
+        "provenance_expected.json not found beside the test. The provenance ID is a PRE-REGISTERED "
+        "expected value and must come from outside the design under test; there is no default and "
+        "no fallback, because a default that masks the value it stands in for is how run 004 failed."
     )
 
 
@@ -283,3 +313,66 @@ async def test_magic_held_forever_runs_exactly_once(dut):
         "a second BIST completed while MAGIC was still held — the lockout does not hold, so the "
         "die would re-sweep for as long as the trigger is present."
     )
+
+
+# ── SPECIMEN for the run-004 defect, both directions ──────────────────────────────────────────
+#
+# These need no simulator: they exercise the oracle directly, which is the point. The defect that
+# failed run 004 was in the oracle, not the design, and an oracle defect must be catchable without
+# a 131k-cycle run or a PDK.
+
+def specimen_oracle_ignores_the_dut():
+    """CONVICT the circularity: a DUT claiming a different ID must not move the expected value.
+
+    The run-004 design read PROVENANCE_ID off the DUT, so a die carrying the WRONG id would have
+    been graded against its own wrong id and passed. This fails if the oracle ever consults the
+    subject again.
+    """
+    class LyingDut:
+        class PROVENANCE_ID:
+            value = 0xDEADBEEF
+        class user_project:
+            class PROVENANCE_ID:
+                value = 0xDEADBEEF
+
+    got = _provenance_id(LyingDut())
+    assert got == 0x9FB80077, f"the oracle consulted the subject: got {got:#010x}"
+    assert got != 0xDEADBEEF
+    return "oracle ignores the DUT"
+
+
+def specimen_works_with_no_dut_at_all():
+    """The gate-level condition, reproduced without a PDK.
+
+    At gate level the parameter does not exist -- parameters bake at synthesis. Passing no DUT is
+    the strictly harder case, so if this resolves, a flattened netlist cannot break it.
+    """
+    assert _provenance_id(None) == 0x9FB80077
+    assert _provenance_id() == 0x9FB80077
+    return "resolves with no DUT"
+
+
+def specimen_refuses_when_the_file_is_missing(tmpdir):
+    """An oracle consulting NOTHING is the adjacent defect, one lazy default away."""
+    import shutil, tempfile
+    global HERE
+    saved = HERE
+    try:
+        HERE = Path(tempfile.mkdtemp())        # a directory with no expected-value file
+        try:
+            _provenance_id(None)
+        except AssertionError as e:
+            assert "will not guess" in str(e) or "no default" in str(e)
+            return "refuses with no file"
+        raise AssertionError("returned a value with no expected-value file present")
+    finally:
+        HERE = saved
+
+
+if __name__ == "__main__":
+    # Runnable WITHOUT cocotb or a simulator, deliberately: the run-004 defect lived in the oracle,
+    # and an oracle defect must be catchable without a 131k-cycle run or a PDK.
+    print("  ok  " + specimen_oracle_ignores_the_dut())
+    print("  ok  " + specimen_works_with_no_dut_at_all())
+    print("  ok  " + specimen_refuses_when_the_file_is_missing(None))
+    print("SPECIMEN OK — the run-004 defect is structurally unreachable")

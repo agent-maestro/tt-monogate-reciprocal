@@ -1,0 +1,10 @@
+{
+  "_why": "PROVENANCE_ID as a PRE-REGISTERED EXPECTED VALUE, sourced outside the design under test.",
+  "_defect_this_replaces": "run 004's bar 2 failed because the test read PROVENANCE_ID off the DUT. That is unreadable at gate level (parameters bake at synthesis) AND circular: a die carrying the wrong ID would have been graded against its own wrong ID and passed.",
+  "provenance_id": "0x9FB80077",
+  "provenance_id_int": 2679636087,
+  "evidence_tag": "additions-evidence-v1",
+  "evidence_commit": "9fb8007720719a6ee72451d7be278f55d8f9259c",
+  "derivation": "first 32 bits of the monogate-research commit the evidence tag points at",
+  "note": "Kept SEPARATE from bist_expected.json so that file stays byte-identical between arming and the repair amendment -- the check that distinguishes fixing the thermometer from moving the target."
+}
