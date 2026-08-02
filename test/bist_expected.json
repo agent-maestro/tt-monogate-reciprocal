@@ -1,0 +1,21 @@
+{
+  "golden_path": "/tmp/claude-1000/-home-monogate-monogate-Portfolio/fbdd1355-724d-4215-ab76-14084c456493/scratchpad/ttfork/test/golden.py",
+  "golden_sha256": "fee1de5e7eb359a9c439a148eb282c2a18e063c4379090cbf3b110973782de7f",
+  "perturb_lsb": 0,
+  "inputs_total": 65536,
+  "inputs_certified": 8128,
+  "crc_full": 2262145735,
+  "crc_certified": 1146153188,
+  "spec": {
+    "order": "b = 0x0000..0xFFFF ascending, raw 16-bit patterns",
+    "datum": "16-bit result, LOW byte then HIGH byte (stipulated internal convention, not the wire order)",
+    "crc32": "poly 0x04C11DB7 reflected (0xEDB88320), init 0xFFFFFFFF, xorout 0xFFFFFFFF",
+    "certified_domain": "|b| in [32, 4095]"
+  },
+  "convict": {
+    "perturbed_crc_certified": 412585512,
+    "perturbed_crc_full": 2812026554,
+    "certified_crc_moved": true,
+    "full_crc_moved": true
+  }
+}
