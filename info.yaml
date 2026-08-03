@@ -34,14 +34,14 @@ pinout:
   ui[7]: "x_in[7] (operand low byte)"
 
   # Outputs
-  uo[0]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[1]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[2]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[3]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[4]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[5]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[6]: "result byte (phase 0 = low, phase 1 = high)"
-  uo[7]: "result byte (phase 0 = low, phase 1 = high)"
+  uo[0]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[1]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[2]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[3]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[4]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[5]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[6]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
+  uo[7]: "result byte (ph0=low, ph1=high); BIST egress: CRC32 then PROVENANCE_ID"
 
   # Bidirectional pins
   uio[0]: "x_in[8] (operand high byte, input only)"
@@ -51,7 +51,7 @@ pinout:
   uio[4]: "x_in[12] (operand high byte, input only)"
   uio[5]: "x_in[13] (operand high byte, input only)"
   uio[6]: "x_in[14] (operand high byte, input only)"
-  uio[7]: "x_in[15] (operand high byte, input only)"
+  uio[7]: "x_in[15] (operand high byte, input only; 0x8000 = reserved BIST trigger)"
 
 # Do not change!
 yaml_version: 6
